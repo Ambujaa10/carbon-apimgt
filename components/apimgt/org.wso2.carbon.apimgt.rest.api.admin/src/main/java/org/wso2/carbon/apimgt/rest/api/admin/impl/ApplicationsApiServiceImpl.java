@@ -6,6 +6,7 @@ import org.wso2.carbon.apimgt.api.APIConsumer;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.model.Application;
 import org.wso2.carbon.apimgt.impl.APIManagerFactory;
+import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import org.wso2.carbon.apimgt.rest.api.admin.ApplicationsApiService;
 import org.wso2.carbon.apimgt.rest.api.admin.dto.ApplicationListDTO;
 import org.wso2.carbon.apimgt.rest.api.admin.utils.mappings.ApplicationMappingUtil;
@@ -22,15 +23,23 @@ public class ApplicationsApiServiceImpl extends ApplicationsApiService {
     @Override
     public Response applicationsApplicationIdChangeOwnerPost(String owner, String applicationId) {
 
+        String user = RestApiUtil.getLoggedInUsername();
+        String tenantDomain = MultitenantUtils.getTenantDomain(user);
+        int tenantId = APIUtil.getTenantId(user);
+
         APIConsumer apiConsumer = null;
         try {
             apiConsumer = APIManagerFactory.getInstance().getAPIConsumer(owner);
-            Application application = apiConsumer.getApplicationByUUID(applicationId);
-            boolean applicationUpdated = apiConsumer.updateApplicationOwner(owner, application);
-            if (applicationUpdated) {
-                return Response.ok().build();
+            Application application = apiConsumer.getApplicationByTenantIdAndUUID(applicationId, tenantId);
+            if (application == null) {
+                RestApiUtil.handleInternalServerError("Application not found ", log);
             } else {
-                RestApiUtil.handleInternalServerError("Error while updating application owner " + applicationId, log);
+                boolean applicationUpdated = apiConsumer.updateApplicationOwner(owner, application);
+                if (applicationUpdated) {
+                    return Response.ok().build();
+                } else {
+                    RestApiUtil.handleInternalServerError("Error while updating application owner " + applicationId, log);
+                }
             }
 
         } catch (APIManagementException e) {

@@ -435,7 +435,7 @@ public interface APIConsumer extends APIManager {
      * @return
      * @throws APIManagementException
      */
-    boolean updateApplicationOwner(String newUserId , Application application ) throws APIManagementException;
+    boolean updateApplicationOwner(String newUserId , Application application) throws APIManagementException;
 
     /**
      * Returns a list of applications for a given subscriber

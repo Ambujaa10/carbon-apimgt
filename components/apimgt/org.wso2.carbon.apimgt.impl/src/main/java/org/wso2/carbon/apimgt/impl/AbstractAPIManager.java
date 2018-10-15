@@ -1602,6 +1602,27 @@ public abstract class AbstractAPIManager implements APIManager {
     }
 
     /**
+     * Returns the corresponding application given the uuid and tenant_id.
+     *
+     * @param uuid uuid of the Application.
+     * @return it will return Application corresponds to the uuid provided.
+     * @throws APIManagementException
+     */
+    public Application getApplicationByTenantIdAndUUID(String uuid, int tenantId) throws APIManagementException {
+        Application application = apiMgtDAO.getApplicationByTenantIdAndUUID(uuid, tenantId);
+        if (application != null) {
+            Set<APIKey> keys = getApplicationKeys(application.getId());
+            for (APIKey key : keys) {
+                if (APIConstants.JWT.equals(application.getTokenType())) {
+                    key.setAccessToken("");
+                }
+                application.addKey(key);
+            }
+        }
+        return application;
+    }
+
+    /**
      * returns the SubscribedAPI object which is related to the UUID
      *
      * @param uuid UUID of Subscription

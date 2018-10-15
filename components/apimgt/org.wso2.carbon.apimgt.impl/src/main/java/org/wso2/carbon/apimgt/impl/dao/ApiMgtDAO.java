@@ -3842,7 +3842,7 @@ public class ApiMgtDAO {
                 isAppUpdated = true;
             } else {
                 String errorMessage = "Error when retrieving subscriber details for user " + userName;
-                handleException(errorMessage, new APIManagementException(errorMessage));
+                log.error(errorMessage);
             }
         } catch (SQLException e) {
             handleException("Error when updating application owner for user " + userName, e);
@@ -5523,6 +5523,115 @@ public class ApiMgtDAO {
             }
         } catch (SQLException e) {
             handleException("Error while obtaining details of the Application : " + applicationId, e);
+        } finally {
+            APIMgtDBUtil.closeAllConnections(prepStmt, connection, rs);
+        }
+        return application;
+    }
+
+    public List<Application> getApplicationByTenantId(int tenant_id) throws APIManagementException {
+        List<Application> applicationList = new ArrayList<>();
+        Connection connection = null;
+        PreparedStatement prepStmt = null;
+        ResultSet rs = null;
+        int applicationId = 0;
+
+        Application application = null;
+        try {
+            connection = APIMgtDBUtil.getConnection();
+
+            String query = SQLConstants.GET_APPLICATION_BY_TENANT_ID_SQL;
+            prepStmt = connection.prepareStatement(query);
+            prepStmt.setInt(1, tenant_id);
+
+            rs = prepStmt.executeQuery();
+            while (rs.next()) {
+                String applicationName = rs.getString("NAME");
+                String subscriberName = rs.getString("CREATED_BY");
+
+                Subscriber subscriber = new Subscriber(subscriberName);
+                application = new Application(applicationName, subscriber);
+                application.setName(rs.getString("NAME"));
+                application.setUUID(rs.getString("UUID"));
+                application.setOwner(rs.getString("CREATED_BY"));
+                applicationList.add(application);
+
+            }
+        } catch (SQLException e) {
+            handleException("Error while obtaining details of the Application : " + tenant_id, e);
+        } finally {
+            APIMgtDBUtil.closeAllConnections(prepStmt, connection, rs);
+        }
+        return applicationList;
+    }
+
+    /**
+     * Retrieves the Application which is corresponding to the given UUID String
+     *
+     * @param uuid UUID of Application
+     * @return
+     * @throws APIManagementException
+     */
+    public Application getApplicationByTenantIdAndUUID(String uuid, int tenantId) throws APIManagementException {
+        Connection connection = null;
+        PreparedStatement prepStmt = null;
+        ResultSet rs = null;
+        int applicationId = 0;
+
+        Application application = null;
+        try {
+            connection = APIMgtDBUtil.getConnection();
+            String query = SQLConstants.GET_APPLICATION_BY_UUID_AND_TENANT_ID_SQL;
+
+            prepStmt = connection.prepareStatement(query);
+            prepStmt.setString(1, uuid);
+            prepStmt.setInt(2, tenantId);
+
+            rs = prepStmt.executeQuery();
+            if (rs.next()) {
+                String applicationName = rs.getString("NAME");
+                String subscriberId = rs.getString("SUBSCRIBER_ID");
+                String subscriberName = rs.getString("USER_ID");
+
+                Subscriber subscriber = new Subscriber(subscriberName);
+                subscriber.setId(Integer.parseInt(subscriberId));
+                application = new Application(applicationName, subscriber);
+
+                application.setDescription(rs.getString("DESCRIPTION"));
+                application.setStatus(rs.getString("APPLICATION_STATUS"));
+                application.setCallbackUrl(rs.getString("CALLBACK_URL"));
+                applicationId = rs.getInt("APPLICATION_ID");
+                application.setId(applicationId);
+                application.setGroupId(rs.getString("GROUP_ID"));
+                application.setUUID(rs.getString("UUID"));
+                application.setTier(rs.getString("APPLICATION_TIER"));
+                application.setTokenType(rs.getString("TOKEN_TYPE"));
+                subscriber.setId(rs.getInt("SUBSCRIBER_ID"));
+
+                if (multiGroupAppSharingEnabled) {
+                    if (application.getGroupId().isEmpty()) {
+                        application.setGroupId(getGroupId(application.getId()));
+                    }
+                }
+
+                Timestamp createdTime = rs.getTimestamp("CREATED_TIME");
+                application.setCreatedTime(createdTime == null ? null : String.valueOf(createdTime.getTime()));
+                try {
+                    Timestamp updated_time = rs.getTimestamp("UPDATED_TIME");
+                    application.setLastUpdatedTime(
+                            updated_time == null ? null : String.valueOf(updated_time.getTime()));
+                } catch (SQLException e) {
+                    // fixing Timestamp issue with default value '0000-00-00 00:00:00'for existing applications created
+                    application.setLastUpdatedTime(application.getCreatedTime());
+                }
+            }
+            // Get custom attributes of application
+            if (application != null) {
+                Map<String, String> applicationAttributes = getApplicationAttributes(connection, applicationId);
+                application.setApplicationAttributes(applicationAttributes);
+            }
+        } catch (SQLException e) {
+            handleException("Error while obtaining details of the Application ", e);
         } finally {
             APIMgtDBUtil.closeAllConnections(prepStmt, connection, rs);
         }

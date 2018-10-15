@@ -1688,6 +1688,18 @@ public class SQLConstants {
             "   APPLICATION_ID = ? " +
             "   AND APP.SUBSCRIBER_ID = SUB.SUBSCRIBER_ID";
 
+    public static final String GET_APPLICATION_BY_TENANT_ID_SQL =
+            " SELECT " +
+            "   SUB.CREATED_BY," +
+            "   APP.UUID," +
+            "   APP.NAME" +
+            " FROM " +
+            "   AM_APPLICATION APP," +
+            "   AM_SUBSCRIBER SUB" +
+            " WHERE " +
+            "   SUB.TENANT_ID = ? " +
+            "   AND APP.SUBSCRIBER_ID = SUB.SUBSCRIBER_ID";
+
     public static final String GET_APPLICATION_BY_UUID_SQL =
             " SELECT " +
             "   APP.APPLICATION_ID," +
@@ -1710,6 +1722,30 @@ public class SQLConstants {
             " WHERE " +
             "   APP.UUID = ? " +
             "   AND APP.SUBSCRIBER_ID = SUB.SUBSCRIBER_ID";
+
+    public static final String GET_APPLICATION_BY_UUID_AND_TENANT_ID_SQL =
+            " SELECT " +
+                    "   APP.APPLICATION_ID," +
+                    "   APP.NAME," +
+                    "   APP.SUBSCRIBER_ID," +
+                    "   APP.APPLICATION_TIER," +
+                    "   APP.CALLBACK_URL," +
+                    "   APP.DESCRIPTION, " +
+                    "   APP.SUBSCRIBER_ID," +
+                    "   APP.APPLICATION_STATUS, " +
+                    "   APP.GROUP_ID, " +
+                    "   APP.UPDATED_TIME, "+
+                    "   APP.CREATED_TIME, "+
+                    "   APP.UUID," +
+                    "   APP.TOKEN_TYPE," +
+                    "   SUB.USER_ID " +
+                    " FROM " +
+                    "   AM_SUBSCRIBER SUB," +
+                    "   AM_APPLICATION APP " +
+                    " WHERE " +
+                    "   APP.UUID = ? " +
+                    "   AND SUB.TENANT_ID = ? " +
+                    "   AND APP.SUBSCRIBER_ID = SUB.SUBSCRIBER_ID";
 
     public static final String GET_APPLICATION_BY_CLIENT_ID_SQL =
             " SELECT " +

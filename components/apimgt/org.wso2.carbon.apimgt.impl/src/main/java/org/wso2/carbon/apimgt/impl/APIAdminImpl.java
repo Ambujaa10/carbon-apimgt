@@ -20,10 +20,12 @@ package org.wso2.carbon.apimgt.impl;
 
 import org.wso2.carbon.apimgt.api.APIAdmin;
 import org.wso2.carbon.apimgt.api.APIManagementException;
+import org.wso2.carbon.apimgt.api.model.Application;
 import org.wso2.carbon.apimgt.api.model.Label;
 import org.wso2.carbon.apimgt.impl.dao.ApiMgtDAO;
 
 import java.util.List;
+import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 
 /**
  * This class provides the core API admin functionality.
@@ -71,5 +73,16 @@ public class APIAdminImpl implements APIAdmin {
      */
     public Label updateLabel(Label label) throws APIManagementException{
         return apiMgtDAO.updateLabel(label);
+    }
+
+    /**
+     * Get applications for the tenantId.
+     *
+     * @param username             content to get application based on tenant_id
+     * @throws APIManagementException if failed to update label
+     */
+    public List<Application> getApplicationByTenantId(String username) throws APIManagementException {
+        List<Application> application = apiMgtDAO.getApplicationByTenantId(APIUtil.getTenantId(username));
+        return application;
     }
 }

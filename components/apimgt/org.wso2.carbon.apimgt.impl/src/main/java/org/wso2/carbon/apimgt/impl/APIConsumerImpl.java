@@ -206,7 +206,7 @@ class APIConsumerImpl extends AbstractAPIManager implements APIConsumer {
      */
     @Override
 	public Set<API> getAPIsWithTag(String tagName, String requestedTenantDomain) throws APIManagementException {
-    	
+
     	 /* We keep track of the lastUpdatedTime of the TagCache to determine its freshness.
          */
         long lastUpdatedTimeAtStart = lastUpdatedTimeForTagApi;
@@ -220,7 +220,7 @@ class APIConsumerImpl extends AbstractAPIManager implements APIConsumer {
         		lastUpdatedTimeForTagApi = System.currentTimeMillis();
                 taggedAPIs = new ConcurrentHashMap<String, Set<API>>();
             }
-        	
+
         }
 
         boolean isTenantMode = requestedTenantDomain != null && !"null".equalsIgnoreCase(requestedTenantDomain);
@@ -260,7 +260,7 @@ class APIConsumerImpl extends AbstractAPIManager implements APIConsumer {
 						taggedAPIs.get(tagName).add(api);
 					}
 				} else {
-					taggedAPIs.putIfAbsent(tagName, apisWithTag);					
+					taggedAPIs.putIfAbsent(tagName, apisWithTag);
 				}
 			}
 
@@ -629,7 +629,7 @@ class APIConsumerImpl extends AbstractAPIManager implements APIConsumer {
         int totalLength=0;
         boolean isMore = false;
         String criteria = APIConstants.LCSTATE_SEARCH_TYPE_KEY;
-        
+
         try {
             Registry userRegistry;
             boolean isTenantMode=(tenantDomain != null);
@@ -678,8 +678,8 @@ class APIConsumerImpl extends AbstractAPIManager implements APIConsumer {
             }
 
             PaginationContext.init(start, end, "ASC", APIConstants.API_OVERVIEW_NAME, maxPaginationLimit);
-            
-            
+
+
             criteria = criteria + APIUtil.getORBasedSearchCriteria(apiStatus);
             GenericArtifactManager artifactManager = APIUtil.getArtifactManager(userRegistry, APIConstants.API_KEY);
             if (artifactManager != null) {
@@ -776,7 +776,7 @@ class APIConsumerImpl extends AbstractAPIManager implements APIConsumer {
         result.put("totalLength", totalLength);
         result.put("isMore", isMore);
         return result;
-        
+
     }
 
     /**
@@ -870,7 +870,7 @@ class APIConsumerImpl extends AbstractAPIManager implements APIConsumer {
             PaginationContext.init(start, end, "ASC", APIConstants.API_OVERVIEW_NAME, maxPaginationLimit);
             GenericArtifactManager artifactManager = APIUtil.getArtifactManager(userRegistry, APIConstants.API_KEY);
             if (artifactManager != null) {
-                
+
                 GenericArtifact[] genericArtifacts = artifactManager.findGenericArtifacts(listMap);
                 totalLength=PaginationContext.getInstance().getLength();
                 if (genericArtifacts == null || genericArtifacts.length == 0) {
@@ -1477,7 +1477,7 @@ class APIConsumerImpl extends AbstractAPIManager implements APIConsumer {
         } catch (UserStoreException e) {
             handleException("Failed to get all the tags", e);
         }
- 
+
         return tagSet;
     }
 
@@ -3695,6 +3695,15 @@ class APIConsumerImpl extends AbstractAPIManager implements APIConsumer {
         return apiMgtDAO.getApplicationsByOwner(userId);
     }
 
+    public boolean validateSubscriber(String subscriberId) throws APIManagementException {
+        boolean isSubscriberValidated = false;
+        Subscriber subscriber = getSubscriber(subscriberId);
+        if (subscriber != null) {
+            isSubscriberValidated = true;
+        }
+        return isSubscriberValidated;
+    }
+
     @Override
     public boolean updateApplicationOwner(String userId, Application application) throws APIManagementException {
 
@@ -3706,30 +3715,34 @@ class APIConsumerImpl extends AbstractAPIManager implements APIConsumer {
                     .getTenantId(MultitenantUtils.getTenantDomain(username));
             UserStoreManager userStoreManager = realmService.getTenantUserRealm(tenantId).getUserStoreManager();
             String oldUserName = application.getSubscriber().getName();
+            String oldTenantDomain = MultitenantUtils.getTenantDomain(oldUserName);
+            String newTenantDomain = MultitenantUtils.getTenantDomain(userId);
             String[] oldUserRoles = userStoreManager.getRoleListOfUser(MultitenantUtils.getTenantAwareUsername
                     (oldUserName));
             String[] newUserRoles = userStoreManager.getRoleListOfUser(MultitenantUtils.getTenantAwareUsername
                     (userId));
-
-            List<String> roleList = new ArrayList<String>();
-            roleList.addAll(Arrays.asList(newUserRoles));
-            for (String role : oldUserRoles) {
-                if (role.contains(application.getName())) {
-                    roleList.add(role);
+            if (oldTenantDomain.equals(newTenantDomain)) {
+                List<String> roleList = new ArrayList<String>();
+                roleList.addAll(Arrays.asList(newUserRoles));
+                for (String role : oldUserRoles) {
+                    if (role.contains(application.getName())) {
+                        roleList.add(role);
+                    }
                 }
+
+                String[] roleArr = roleList.toArray(new String[roleList.size()]);
+
+                APIManagerConfiguration config = getAPIManagerConfiguration();
+                String serverURL = config.getFirstProperty(APIConstants.AUTH_MANAGER_URL) + "UserAdmin";
+                String adminUsername = config.getFirstProperty(APIConstants.AUTH_MANAGER_USERNAME);
+                String adminPassword = config.getFirstProperty(APIConstants.AUTH_MANAGER_PASSWORD);
+
+                UserAdminStub userAdminStub = new UserAdminStub(serverURL);
+                CarbonUtils.setBasicAccessSecurityHeaders(adminUsername, adminPassword, userAdminStub._getServiceClient());
+
+                userAdminStub.updateRolesOfUser(userId, roleArr);
+                isAppUpdated = true;
             }
-
-            String[] roleArr = roleList.toArray(new String[roleList.size()]);
-
-            APIManagerConfiguration config = getAPIManagerConfiguration();
-            String serverURL = config.getFirstProperty(APIConstants.AUTH_MANAGER_URL) + "UserAdmin";
-            String adminUsername = config.getFirstProperty(APIConstants.AUTH_MANAGER_USERNAME);
-            String adminPassword = config.getFirstProperty(APIConstants.AUTH_MANAGER_PASSWORD);
-
-            UserAdminStub userAdminStub = new UserAdminStub(serverURL);
-            CarbonUtils.setBasicAccessSecurityHeaders(adminUsername, adminPassword, userAdminStub._getServiceClient());
-            userAdminStub.updateRolesOfUser(userId, roleArr);
-            isAppUpdated = true;
 
         } catch (org.wso2.carbon.user.api.UserStoreException e) {
             handleException("Error when getting the tenant's UserStoreManager or when getting roles of user ", e);

@@ -309,6 +309,16 @@ public interface APIManager {
     Application getApplicationByUUID(String uuid) throws APIManagementException;
 
     /**
+     * Returns the corresponding application given the uuid and tenantId
+     *
+     * @param uuid uuid of the Application
+     * @param tenantId tenantId of the Application
+     * @return it will return Application corresponds to the uuid provided.
+     * @throws APIManagementException
+     */
+    Application getApplicationByTenantIdAndUUID(String uuid, int tenantId) throws APIManagementException;
+
+    /**
      * Check whether an application access token is already persist in database.
      *
      * @param accessToken
