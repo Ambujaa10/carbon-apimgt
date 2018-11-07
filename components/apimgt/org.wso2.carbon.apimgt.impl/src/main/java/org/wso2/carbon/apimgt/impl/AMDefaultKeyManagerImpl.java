@@ -166,7 +166,7 @@ public class AMDefaultKeyManagerImpl extends AbstractKeyManager {
     }
 
     @Override
-    public OAuthApplicationInfo updateApplication(OAuthAppRequest appInfoDTO) throws APIManagementException {
+    public OAuthApplicationInfo  updateApplication(OAuthAppRequest appInfoDTO) throws APIManagementException {
         OAuthApplicationInfo oAuthApplicationInfo = appInfoDTO.getOAuthApplicationInfo();
 
         try {
@@ -205,6 +205,50 @@ public class AMDefaultKeyManagerImpl extends AbstractKeyManager {
         } catch (Exception e) {
             handleException("Error occurred while updating OAuth Client : ", e);
         } 
+        return null;
+    }
+
+    @Override
+    public OAuthApplicationInfo  updateApplicationOwner(OAuthAppRequest appInfoDTO) throws APIManagementException {
+        OAuthApplicationInfo oAuthApplicationInfo = appInfoDTO.getOAuthApplicationInfo();
+
+        try {
+
+            String userId = (String) oAuthApplicationInfo.getParameter(ApplicationConstants.OAUTH_CLIENT_USERNAME);
+            String[] grantTypes = null;
+            if (oAuthApplicationInfo.getParameter(ApplicationConstants.OAUTH_CLIENT_GRANT) != null) {
+                grantTypes = ((String)oAuthApplicationInfo.getParameter(ApplicationConstants.OAUTH_CLIENT_GRANT))
+                        .split(",");
+            }
+            String applicationName = oAuthApplicationInfo.getClientName();
+            String keyType = (String) oAuthApplicationInfo.getParameter(ApplicationConstants.APP_KEY_TYPE);
+
+            if (keyType != null) {
+                applicationName = applicationName + "_" + keyType;
+            }
+            log.debug("Updating OAuth Client with ID : " + oAuthApplicationInfo.getClientId());
+
+            if (log.isDebugEnabled() && oAuthApplicationInfo.getCallBackURL() != null) {
+                log.debug("CallBackURL : " + oAuthApplicationInfo.getCallBackURL());
+            }
+
+            if (log.isDebugEnabled() && applicationName != null) {
+                log.debug("Client Name : " + applicationName);
+            }
+            org.wso2.carbon.apimgt.api.model.xsd.OAuthApplicationInfo applicationInfo = updateOAuthApplication(userId,
+                    applicationName, oAuthApplicationInfo.getCallBackURL(),oAuthApplicationInfo.getClientId(),
+                    grantTypes);
+            OAuthApplicationInfo newAppInfo = new OAuthApplicationInfo();
+            newAppInfo.setAppOwner(applicationInfo.getAppOwner());
+            newAppInfo.setClientId(applicationInfo.getClientId());
+            newAppInfo.setCallBackURL(applicationInfo.getCallBackURL());
+            newAppInfo.setClientSecret(applicationInfo.getClientSecret());
+            newAppInfo.setJsonString(applicationInfo.getJsonString());
+
+            return newAppInfo;
+        } catch (Exception e) {
+            handleException("Error occurred while updating OAuth Client : ", e);
+        }
         return null;
     }
 

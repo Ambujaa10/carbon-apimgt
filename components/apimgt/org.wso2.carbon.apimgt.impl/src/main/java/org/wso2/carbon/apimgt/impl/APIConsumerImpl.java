@@ -80,6 +80,10 @@ import org.wso2.carbon.governance.api.exception.GovernanceException;
 import org.wso2.carbon.governance.api.generic.GenericArtifactManager;
 import org.wso2.carbon.governance.api.generic.dataobjects.GenericArtifact;
 import org.wso2.carbon.governance.api.util.GovernanceUtils;
+import org.wso2.carbon.identity.base.IdentityException;
+
+import org.wso2.carbon.apimgt.keymgt.APIKeyMgtException;
+import org.wso2.carbon.apimgt.keymgt.service.APIKeyMgtSubscriberService;
 import org.wso2.carbon.registry.common.TermData;
 import org.wso2.carbon.registry.core.ActionConstants;
 import org.wso2.carbon.registry.core.Association;
@@ -139,6 +143,7 @@ import javax.wsdl.Definition;
 class APIConsumerImpl extends AbstractAPIManager implements APIConsumer {
 
     private static final Log log = LogFactory.getLog(APIConsumerImpl.class);
+    private static final Log audit = CarbonConstants.AUDIT_LOG;
     public static final char COLON_CHAR = ':';
     public static final String EMPTY_STRING = "";
 
@@ -3699,48 +3704,73 @@ class APIConsumerImpl extends AbstractAPIManager implements APIConsumer {
     public boolean updateApplicationOwner(String userId, Application application) throws APIManagementException {
 
         boolean isAppUpdated = false;
+        boolean isRoleAvailable = false;
 
         try {
             RealmService realmService = ServiceReferenceHolder.getInstance().getRealmService();
-            int tenantId = ServiceReferenceHolder.getInstance().getRealmService().getTenantManager()
-                    .getTenantId(MultitenantUtils.getTenantDomain(username));
-            UserStoreManager userStoreManager = realmService.getTenantUserRealm(tenantId).getUserStoreManager();
             String oldUserName = application.getSubscriber().getName();
-            String[] oldUserRoles = userStoreManager.getRoleListOfUser(MultitenantUtils.getTenantAwareUsername
-                    (oldUserName));
-            String[] newUserRoles = userStoreManager.getRoleListOfUser(MultitenantUtils.getTenantAwareUsername
-                    (userId));
+            String oldTenantDomain = MultitenantUtils.getTenantDomain(oldUserName);
+            String newTenantDomain = MultitenantUtils.getTenantDomain(userId);
+            if (oldTenantDomain.equals(newTenantDomain)) {
+                int tenantId = ServiceReferenceHolder.getInstance().getRealmService().getTenantManager()
+                        .getTenantId(MultitenantUtils.getTenantDomain(username + "@" + oldTenantDomain));
+                UserStoreManager userStoreManager = realmService.getTenantUserRealm(tenantId).getUserStoreManager();
 
-            List<String> roleList = new ArrayList<String>();
-            roleList.addAll(Arrays.asList(newUserRoles));
-            for (String role : oldUserRoles) {
-                if (role.contains(application.getName())) {
-                    roleList.add(role);
+                String[] oldUserRoles = userStoreManager.getRoleListOfUser(MultitenantUtils.getTenantAwareUsername
+                        (oldUserName));
+                int applicationId = application.getId();
+                Set<String> consumerKey = apiMgtDAO.getConsumerKeysOfApplication(applicationId);
+                Object[] consumerKeys = consumerKey.toArray();
+                List<String> roleList = new ArrayList<String>();
+                for (String role : oldUserRoles) {
+                    if (role.indexOf("_") > 0) {
+                        String applicationNameInRole = role.substring(role.indexOf("_") + 1, role.lastIndexOf("_"));
+                        if (applicationNameInRole.equals(application.getName())) {
+                            roleList.add(role);
+                        }
+                    }
                 }
+                String[] roleArr = roleList.toArray(new String[roleList.size()]);
+                userStoreManager.updateRoleListOfUser(userId.replace("@" + newTenantDomain, ""),
+                        null, roleArr);
+                OAuthApplicationInfo oAuthApplicationInfo;
+                APIKeyMgtSubscriberService keyMgtSubscriberService = new APIKeyMgtSubscriberService();
+                for (int i = 0; i < consumerKeys.length; i++) {
+                    oAuthApplicationInfo = keyMgtSubscriberService.retrieveOAuthApplication(consumerKeys[i].toString());
+                    OAuthAppRequest oauthAppRequest = ApplicationUtils.createOauthAppRequest(oAuthApplicationInfo.getParameter(ApplicationConstants.OAUTH_CLIENT_NAME).toString(), null, oAuthApplicationInfo.getCallBackURL(),
+                            null, null, application.getTokenType());
+
+
+                    oauthAppRequest.getOAuthApplicationInfo().setClientId(consumerKeys[i].toString());
+                    //get key manager instance.
+                    KeyManager keyManager = KeyManagerHolder.getKeyManagerInstance();
+                    //call update method.
+
+                    OAuthApplicationInfo updatedAppInfo = keyManager.updateApplicationOwner(oauthAppRequest);
+
+//                    oAuthApplicationInfo = keyMgtSubscriberService.updateOAuthApplication(userId,
+//                            oAuthApplicationInfo.getParameter(ApplicationConstants.OAUTH_CLIENT_NAME).toString(),
+//                            oAuthApplicationInfo.getCallBackURL(), consumerKeys[i].toString(),
+//                            new String[]{oAuthApplicationInfo
+//                                    .getParameter(ApplicationConstants.OAUTH_CLIENT_GRANT).toString()});
+                }
+                isAppUpdated = true;
+                audit.info("Successfully updated the owner of application " + application.getName() + " from " +
+                        oldUserName + " to " + userId);
+            } else {
+                throw new APIManagementException("Can not update application owner from " + oldUserName + " to " +
+                        userId + " as both users are not in the same tenant domain");
             }
-
-            String[] roleArr = roleList.toArray(new String[roleList.size()]);
-
-            APIManagerConfiguration config = getAPIManagerConfiguration();
-            String serverURL = config.getFirstProperty(APIConstants.AUTH_MANAGER_URL) + "UserAdmin";
-            String adminUsername = config.getFirstProperty(APIConstants.AUTH_MANAGER_USERNAME);
-            String adminPassword = config.getFirstProperty(APIConstants.AUTH_MANAGER_PASSWORD);
-
-            UserAdminStub userAdminStub = new UserAdminStub(serverURL);
-            CarbonUtils.setBasicAccessSecurityHeaders(adminUsername, adminPassword, userAdminStub._getServiceClient());
-            userAdminStub.updateRolesOfUser(userId, roleArr);
-            isAppUpdated = true;
+            if (isAppUpdated) {
+                isAppUpdated = apiMgtDAO.updateApplicationOwner(userId, application);
+            }
 
         } catch (org.wso2.carbon.user.api.UserStoreException e) {
             handleException("Error when getting the tenant's UserStoreManager or when getting roles of user ", e);
-        } catch (RemoteException e) {
-            handleException("Server couldn't establish connection with auth manager ", e);
-        } catch (UserAdminUserAdminException e) {
-            handleException("Error when getting the tenant's UserStoreManager or when getting roles of user ", e);
-        }
-
-        if (isAppUpdated) {
-            isAppUpdated = apiMgtDAO.updateApplicationOwner(userId, application);
+        } catch (APIKeyMgtException e) {
+            handleException("Error when getting the OAuth application info ", e);
+        } catch (IdentityException e) {
+            handleException("Error when getting the OAuth application info ", e);
         }
 
         //todo update Outh application once the oauth component supports to update the owner
